@@ -9,6 +9,8 @@ Create the following directory structure:
 
 plaintext
 project/
+
+
 ├── docker-compose.yml
 
 ├── django/
