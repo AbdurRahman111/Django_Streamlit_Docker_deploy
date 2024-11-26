@@ -10,19 +10,33 @@ Create the following directory structure:
 plaintext
 project/
 ├── docker-compose.yml
+
 ├── django/
+
 │   ├── Dockerfile
+
 │   ├── app/  # Your Django app files
+
 │   ├── requirements.txt
+
 │   └── ...
+
 ├── streamlit/
+
 │   ├── Dockerfile
+
 │   ├── app/  # Your Streamlit app files
+
 │   └── requirements.txt
+
 ├── nginx/
+
 │   ├── conf.d/
+
 │   │   ├── django.conf
+
 │   │   ├── streamlit.conf
+
 │   └── Dockerfile
 
 
