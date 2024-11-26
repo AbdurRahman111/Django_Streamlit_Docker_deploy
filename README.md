@@ -10,6 +10,7 @@ Create the following directory structure:
 plaintext
 project/
 
+![image](https://github.com/user-attachments/assets/b4a7eb84-93d2-47b9-8ea9-4364617ae5c3)
 
 ├── docker-compose.yml
 
