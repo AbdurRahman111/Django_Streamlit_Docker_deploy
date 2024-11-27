@@ -7,10 +7,12 @@ Here’s how to deploy a Django app and a Streamlit app on separate subdomains u
 ### *Directory Structure*
 Create the following directory structure:
 
-plaintext
-project/
+
 
 ![image](https://github.com/user-attachments/assets/b4a7eb84-93d2-47b9-8ea9-4364617ae5c3)
+plaintext
+
+project/
 
 ├── docker-compose.yml
 
@@ -261,3 +263,199 @@ Add a cron job to automatically renew certificates:
 ### *Access Your Apps*
 - Django: `https://django.example.com`
 - Streamlit: `https://streamlit.example.com`
+
+=================================================================================================================================
+
+
+
+
+
+
+
+
+
+Here’s the updated code to include *Celery* as one of the containers, along with *Redis* as its message broker. Celery will work with the Django app to handle background tasks.
+
+---
+
+### Updated Directory Structure
+plaintext
+project/
+├── docker-compose.yml
+├── django/
+│   ├── Dockerfile
+│   ├── app/  # Your Django app files
+│   ├── celery.py
+│   ├── requirements.txt
+│   └── ...
+├── streamlit/
+│   ├── Dockerfile
+│   ├── app/  # Your Streamlit app files
+│   └── requirements.txt
+├── nginx/
+│   ├── conf.d/
+│   │   ├── django.conf
+│   │   ├── streamlit.conf
+│   └── Dockerfile
+
+![image](https://github.com/user-attachments/assets/6f06ef65-06aa-41e7-80f6-0446535ed89d)
+
+---
+
+### *Step 1: Django Dockerfile*
+Add *Celery dependencies* to Django's `requirements.txt`:
+plaintext
+celery[redis]==5.2.7
+
+
+Create `django/Dockerfile`:
+dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["gunicorn", "app.wsgi:application", "--bind", "0.0.0.0:8000"]
+
+
+---
+
+### *Step 2: Celery Configuration in Django*
+Add `celery.py` to the `django/app/` directory:
+python
+from celery import Celery
+
+# Initialize Celery
+app = Celery('app')
+app.config_from_object('django.conf:settings', namespace='CELERY')
+app.autodiscover_tasks()
+
+
+Update `settings.py`:
+python
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://redis:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+
+
+---
+
+### *Step 3: Redis Container*
+Add Redis to `docker-compose.yml` (below).
+
+---
+
+### *Step 4: Updated `docker-compose.yml`*
+Add Celery and Redis containers to the stack:
+yaml
+version: "3.9"
+
+services:
+  django:
+    build:
+      context: ./django
+    container_name: django
+    expose:
+      - "8000"
+    depends_on:
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+
+  celery:
+    build:
+      context: ./django
+    container_name: celery
+    command: celery -A app worker --loglevel=info
+    depends_on:
+      - django
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+
+  redis:
+    image: redis:alpine
+    container_name: redis
+    expose:
+      - "6379"
+
+  streamlit:
+    build:
+      context: ./streamlit
+    container_name: streamlit
+    expose:
+      - "8501"
+
+  nginx:
+    build:
+      context: ./nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do sleep 2073600; done'"
+
+volumes:
+  certbot_certs:
+
+
+---
+
+### *Step 5: Celery Integration*
+Add tasks in your Django app (e.g., `tasks.py`):
+python
+from celery import shared_task
+
+@shared_task
+def sample_task():
+    return "Task completed!"
+
+
+Call tasks in your Django views:
+python
+from .tasks import sample_task
+
+def trigger_task(request):
+    sample_task.delay()
+    return HttpResponse("Task triggered!")
+
+
+---
+
+### *Step 6: Nginx Configuration*
+No changes needed; the current configuration works for both Django and Streamlit.
+
+---
+
+### *Step 7: Run the Stack*
+Build and start all containers:
+bash
+docker-compose up --build -d
+
+
+---
+
+### *Step 8: Test Celery*
+Access your Django app and trigger a task. Verify Celery logs by running:
+bash
+docker logs celery
+
+
+---
+
+### *Result*
+- Django and Streamlit apps run on separate subdomains with SSL.
+- Celery handles background tasks with Redis as the broker.
